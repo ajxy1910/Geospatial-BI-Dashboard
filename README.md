@@ -81,7 +81,7 @@ The geographical visualization helps understand the spatial distribution of busi
 
 ## 🚚 3. Logistics & Stock Transfer Intelligence
 
-The Logistics module analyzes stock transfer data.
+The Logistics & Stock Transfer module analyzes the available stock-transfer dataset.
 
 The cleaned stock-transfer dataset contains:
 
@@ -90,7 +90,7 @@ The cleaned stock-transfer dataset contains:
 - 30 dates
 - 4,500 transfer records
 
-The dashboard currently provides:
+The dashboard provides:
 
 - Total Transfer Quantity
 - Cities Covered
@@ -102,41 +102,48 @@ The dashboard currently provides:
 
 ### Current Dashboard Output
 
+The current dashboard output includes:
+
 - **Total Transfer Quantity:** 163,780
 - **Cities Covered:** 3
 - **SKUs Covered:** 50
 
 ### Important Data Limitation
 
-The source stock-transfer dataset does not explicitly provide source and destination fields.
+The original stock-transfer dataset is provided in a city-wise matrix format.
+
+The available data contains city, SKU, date and quantity information but does not explicitly provide source and destination fields.
 
 Therefore, the dashboard does **not** create or assume artificial source-to-destination routes.
 
 Instead, the project performs:
 
-> **City-wise Stock Movement Analysis**
+**City-wise Stock Movement Analysis**
 
-based on the available city, SKU, date and quantity information.
+based on the available source data.
 
 ---
 
 ## 📦 4. Inventory Intelligence
 
-The Inventory Intelligence module uses inventory-related datasets to provide stock analysis.
+The Inventory Intelligence module uses the Opening Stock dataset to provide inventory-related analysis.
 
-It includes:
+It provides information related to:
 
-- Opening stock analysis
-- SKU-level stock information
-- Stock-related KPIs
-- Inventory visualization
-- Product-level analysis
+- Opening stock records
+- City-wise stock
+- SKU-level stock
+- Date-wise stock information
+- Product-level inventory
+- Inventory-related KPIs
+
+The dashboard displays the available inventory information from the source dataset.
 
 ---
 
 ## 🏭 5. MSME Intelligence
 
-The MSME module uses the available Maharashtra MSME dataset to provide business-related statistical analysis.
+The MSME Intelligence module uses the available Maharashtra MSME dataset to provide business-related statistical analysis.
 
 It supports:
 
@@ -149,7 +156,7 @@ It supports:
 
 ## 🗺️ 6. Census & Location Intelligence
 
-The project also integrates demographic and geographical datasets.
+The project integrates demographic and geographical datasets.
 
 These datasets are used for:
 
@@ -161,7 +168,7 @@ These datasets are used for:
 
 ---
 
-# 🎛️ Interactive Filters
+# 🎛️ 7. Interactive Filters
 
 The dashboard provides interactive filters for data exploration.
 
@@ -175,27 +182,73 @@ Changing the filters dynamically updates the relevant dashboard visualizations.
 
 ---
 
-# 📊 Dashboard Visualizations
+# 📊 8. Dashboard Visualizations
 
 The dashboard uses interactive visualizations for business analysis, including:
 
+- KPI cards
 - Bar charts
 - Line charts
-- KPI cards
-- Data tables
 - Geographic visualizations
 - Stock movement charts
 - Category-wise analysis
 - City-wise analysis
 - SKU-level analysis
+- Interactive data tables
+
+The visualizations are designed to make business information easier to understand and explore.
 
 ---
 
-# 🗂️ Datasets
+# 📈 9. Business Intelligence Analysis
+
+The dashboard provides analysis across multiple business dimensions.
+
+### Retail Analysis
+
+- Total Units Sold
+- Total Revenue
+- Daily Sales
+- City-wise Sales
+- Category-wise Sales
+- Product/SKU-level Sales
+
+### Inventory Analysis
+
+- Opening Stock
+- SKU-level Stock
+- Product-level Inventory
+- Inventory-related KPIs
+
+### Logistics Analysis
+
+- Total Transfer Quantity
+- Cities Covered
+- SKUs Covered
+- City-wise Stock Movement
+- SKU-wise Stock Movement
+- Transfer Intensity
+
+### Geospatial Analysis
+
+- City-level business activity
+- Geographical distribution
+- Location-based analysis
+- Interactive geographical visualization
+
+### MSME & Demographic Analysis
+
+- District-level MSME information
+- Census information
+- Location-based demographic context
+
+---
+
+# 🗂️ 10. Datasets
 
 The project uses multiple datasets stored in the `data/raw/` directory.
 
-## Main Datasets
+### Main Datasets
 
 ```text
 Sales.csv
@@ -205,282 +258,230 @@ stock_transfer_cleaned.csv
 census2011.csv
 maharashtra-districts.csv
 district_level_total_Registered_msme.csv
+```
 
-📁 Dataset Description
-Sales.csv
+### Dataset Description
+
+#### Sales.csv
 
 Contains retail sales information used for:
 
-Daily sales analysis
-Revenue analysis
-City-wise sales analysis
-Category-wise analysis
-Product/SKU-level analysis
-Sales trend visualization
-SKU MASTER.csv
+- Daily sales analysis
+- Revenue analysis
+- City-wise sales analysis
+- Category-wise sales analysis
+- Product/SKU-level analysis
+- Sales trend visualization
 
-Contains SKU/product master information used for:
+#### SKU MASTER.csv
 
-Product identification
-SKU-level analysis
-Product-related business analysis
-Opening Stock.csv
+Contains product and SKU master information used for:
+
+- Product identification
+- SKU-level analysis
+- Product-level mapping
+- Category analysis
+
+#### Opening Stock.csv
 
 Contains opening inventory information used for:
 
-Opening stock analysis
-SKU-level inventory analysis
-Inventory-related KPIs
-Stock visualization
-stock_transfer_cleaned.csv
+- Opening stock analysis
+- City-wise stock analysis
+- SKU-level inventory analysis
+- Inventory-related KPIs
 
-This is the cleaned and structured stock-transfer dataset used by the dashboard.
+#### stock_transfer_cleaned.csv
 
-The dataset contains:
+Contains cleaned stock-transfer information structured by:
 
-3 Cities
-50 SKUs
-30 Dates
-4,500 Transfer Records
+- City
+- SKU
+- Date
+- Quantity
 
-The structured data contains:
+The dataset is used for city-wise and SKU-wise stock movement analysis.
 
+#### census2011.csv
+
+Contains census-related information used for demographic and geographical analysis.
+
+#### maharashtra-districts.csv
+
+Contains Maharashtra district geographical information used for location-based visualization.
+
+#### district_level_total_Registered_msme.csv
+
+Contains district-level registered MSME information used for MSME analysis.
+
+---
+
+# 🧹 11. Data Cleaning & Preparation
+
+The project uses data preprocessing before performing dashboard analysis.
+
+The general data preparation workflow includes:
+
+1. Loading the source datasets.
+2. Inspecting dataset structure.
+3. Handling missing or invalid values where required.
+4. Standardizing column names.
+5. Converting date columns into appropriate date formats.
+6. Converting numerical fields into appropriate data types.
+7. Preparing datasets for visualization.
+8. Cleaning and structuring stock-transfer data.
+9. Preparing geographical information for mapping.
+10. Using the cleaned datasets for dashboard analysis.
+
+The stock-transfer data was transformed into a structured format containing:
+
+```text
 City
 SKU
 Date
 Quantity
+```
 
-This format allows the dashboard to perform city-wise, SKU-wise and date-wise stock movement analysis.
+This structured format allows efficient analysis of stock movement by city, SKU and date.
 
-census2011.csv
+---
 
-Contains Census 2011-related demographic information used for supporting:
+# 🔄 12. Stock Transfer Data Transformation
 
-District-level analysis
-Population-related analysis
-Location-based analysis
-maharashtra-districts.csv
+The original stock-transfer data was provided in a city-wise matrix format.
 
-Contains Maharashtra district geographical information used for:
+For dashboard analysis, it was converted into a cleaned structured dataset containing:
 
-Geospatial analysis
-District-level mapping
-Location visualization
-Geographical business context
-district_level_total_Registered_msme.csv
-
-Contains district-level registered MSME information used for:
-
-MSME analysis
-District-level business context
-Location-based analysis
-Interactive visualization
-🧹 Data Cleaning & Preprocessing
-
-The project performs data preparation before using the datasets for dashboard analysis.
-
-The preprocessing workflow includes:
-
-Loading CSV datasets using Pandas
-Cleaning dataset columns
-Handling missing or unnecessary values
-Converting dates into appropriate formats
-Converting numerical fields into numeric data types
-Standardizing city information
-Preparing datasets for visualization
-Transforming the original stock-transfer matrix into a structured dataset
-🔄 Stock Transfer Data Transformation
-
-The original STOCK TRANSFER.csv dataset was provided in a city-wise matrix format.
-
-The original structure was not directly suitable for dashboard analysis because city, SKU, date and quantity information were arranged in a matrix-style format.
-
-The data was therefore transformed into a structured format:
-
-City | SKU | Date | Quantity
-
-This cleaned dataset is stored as:
-
-stock_transfer_cleaned.csv
-
-The transformed dataset is used by the dashboard for:
-
-Total transfer quantity
-City-wise stock movement
-SKU-wise stock movement
-Date-wise stock movement
-Transfer intensity analysis
-🔐 Data Integrity
-
-The project follows a data-integrity approach in which information is not artificially generated when it is unavailable in the source dataset.
-
-The original stock-transfer data does not contain explicit:
-
-Source City
-Destination City
-
-fields.
-
-Therefore, the dashboard does not create artificial source-to-destination routes.
-
-Instead, it performs:
-
-City-wise Stock Movement Analysis
-
-using the available:
-
+```text
 City
 SKU
 Date
 Quantity
+```
 
-This ensures that the dashboard analysis remains consistent with the available source data.
+This transformation allows the dashboard to perform:
 
-📊 Business Intelligence Analysis
+- City-wise stock movement analysis
+- SKU-wise stock movement analysis
+- Date-wise stock analysis
+- Quantity-based transfer analysis
+- Transfer intensity visualization
 
-The dashboard provides analysis across multiple business dimensions.
+The transformation preserves the information available in the original dataset without inventing source or destination routes.
 
-Retail Analysis
-Total Units Sold
-Total Revenue
-Daily Sales
-City-wise Sales
-Category-wise Sales
-Product/SKU-level Sales
-Inventory Analysis
-Opening Stock
-SKU-level Stock
-Product-level Inventory
-Inventory-related KPIs
-Logistics Analysis
-Total Transfer Quantity
-Cities Covered
-SKUs Covered
-City-wise Stock Movement
-SKU-wise Stock Movement
-Transfer Intensity
-Geospatial Analysis
-City-level business activity
-Geographical distribution
-Location-based analysis
-Interactive geographical visualization
-MSME & Demographic Analysis
-District-level MSME information
-Census information
-Population-related information
-Geographical business context
-🗺️ Geospatial Analysis Workflow
+---
 
-The geospatial component follows the workflow:
+# 🗺️ 13. Geospatial Analysis
 
-Business Data
-      ↓
-City / District Information
-      ↓
-Geographical Data
-      ↓
-Latitude & Longitude
-      ↓
-Spatial Visualization
-      ↓
-Business Insights
+The dashboard includes geospatial analysis using available geographical information.
 
-The geospatial component helps connect business information with geographical locations.
+The geospatial component supports:
 
-It supports:
+- City-level analysis
+- District-level information
+- Geographic distribution
+- Location-based business analysis
+- Interactive map visualization
 
-Location-based business analysis
-City-wise analysis
-District-level analysis
-Interactive map visualization
-Geographical comparison
-🚚 Logistics Analysis Workflow
+Geographical datasets are used to provide additional context to business and demographic information.
 
-The logistics analysis follows:
+---
 
-STOCK TRANSFER.csv
-        ↓
-Data Cleaning
-        ↓
-Data Transformation
-        ↓
-City / SKU / Date / Quantity
-        ↓
-Aggregation
-        ↓
-Stock Movement Analysis
-        ↓
-Interactive Visualization
+# 📊 14. KPI Analysis
 
-The dashboard uses the cleaned stock-transfer dataset for logistics-related analysis.
+The dashboard presents important business indicators through KPI cards.
 
-🎛️ Dashboard Filter Workflow
+Examples include:
 
-The dashboard provides interactive filtering through the Streamlit sidebar.
+### Retail KPIs
 
-City Filter
+- Total Units Sold
+- Total Revenue
+- Sales Performance
 
-Allows users to select one or multiple cities.
+### Inventory KPIs
 
-Category Filter
+- Opening Stock
+- Available Inventory Information
+- SKU Coverage
 
-Allows users to select one or multiple product categories.
+### Logistics KPIs
 
-Date Range Filter
+- Total Transfer Quantity
+- Cities Covered
+- SKUs Covered
 
-Allows users to select a date range for time-based analysis.
+The KPI values are generated from the available datasets and dashboard filters.
 
-The selected filters dynamically affect the relevant dashboard analysis.
+---
 
-📈 Dashboard KPIs
+# 🔍 15. Interactive Data Exploration
 
-The dashboard provides KPI cards to summarize important business information.
+The dashboard allows users to interact with the available business data.
 
-Retail KPIs
-Total Units Sold
-Total Revenue
-Number of Products
-Number of Cities
-Logistics KPIs
-Total Transfer Quantity
-Cities Covered
-SKUs Covered
+Users can select:
 
-The displayed values depend on the selected dataset and dashboard filters.
+- Cities
+- Categories
+- Date ranges
 
-🛠️ Technology Stack
-Programming Language
-Python
-Dashboard Framework
-Streamlit
-Data Processing
-Pandas
-NumPy
-Data Visualization
-Plotly
-Geospatial Visualization
-Plotly
-Geographical coordinate data
-Maharashtra district data
-Development Tools
-Visual Studio Code
-Python Virtual Environment
-Git
-GitHub
-📂 Project Structure
+The selected filters are applied to the relevant analysis and visualizations.
+
+This allows users to explore specific portions of the dataset without modifying the original source files.
+
+---
+
+# 🛠️ 16. Technology Stack
+
+### Programming Language
+
+- Python
+
+### Dashboard Framework
+
+- Streamlit
+
+### Data Processing
+
+- Pandas
+- NumPy
+
+### Data Visualization
+
+- Plotly
+
+### Geospatial Analysis
+
+- Geographical datasets
+- Interactive map visualizations
+
+### Development Tools
+
+- Visual Studio Code
+- Git
+- GitHub
+- Python Virtual Environment
+
+---
+
+# 📁 17. Project Structure
+
+The project follows the following structure:
+
+```text
 Geospatial-BI-Dashboard/
 │
 ├── data/
 │   ├── external/
 │   ├── processed/
 │   └── raw/
+│       ├── census2011.csv
+│       ├── district_level_total_Registered_msme.csv
+│       ├── maharashtra-districts.csv
+│       ├── Opening Stock.csv
 │       ├── Sales.csv
 │       ├── SKU MASTER.csv
-│       ├── Opening Stock.csv
-│       ├── stock_transfer_cleaned.csv
-│       ├── census2011.csv
-│       ├── maharashtra-districts.csv
-│       └── district_level_total_Registered_msme.csv
+│       └── stock_transfer_cleaned.csv
 │
 ├── notebooks/
 │
@@ -490,200 +491,207 @@ Geospatial-BI-Dashboard/
 ├── app.py
 ├── README.md
 └── requirements.txt
-⚙️ Installation & Setup
-1. Clone the Repository
+```
+
+---
+
+# ⚙️ 18. Installation & Setup
+
+## 18.1 Clone the Repository
+
+```bash
 git clone https://github.com/ajxy1910/Geospatial-BI-Dashboard.git
-2. Navigate to the Project Directory
+```
+
+## 18.2 Navigate to the Project Directory
+
+```bash
 cd Geospatial-BI-Dashboard
-3. Create a Virtual Environment
+```
+
+## 18.3 Create a Virtual Environment
+
+```bash
 python -m venv .venv
-4. Activate the Virtual Environment
-Windows
+```
+
+## 18.4 Activate the Virtual Environment
+
+### Windows
+
+```bash
 .venv\Scripts\activate
-Linux / macOS
+```
+
+### Linux / macOS
+
+```bash
 source .venv/bin/activate
+```
 
-5. Install Dependencies
+## 18.5 Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-### ▶️ Run the Application
+---
 
-After activating the virtual environment, run:
+# ▶️ 19. Run the Application
 
+After activating the virtual environment and installing the dependencies, run:
+
+```bash
 streamlit run app.py
+```
 
 The application will normally be available at:
 
+```text
 http://localhost:8501
-🔄 Git & GitHub
+```
+
+The Streamlit dashboard will open in the browser.
+
+---
+
+# 🔧 20. Git & GitHub
 
 The project is maintained using Git and GitHub.
 
-Basic Git Workflow
+The repository contains:
+
+- Source code
+- Dashboard application
+- Dataset files
+- Requirements file
+- Project documentation
+
+The project can be updated using the standard Git workflow:
+
+```bash
 git status
 git add .
 git commit -m "Update dashboard"
 git push origin main
-Repository
-https://github.com/ajxy1910/Geospatial-BI-Dashboard
-🚀 Deployment
+```
+
+---
+
+# ☁️ 21. Deployment
 
 The Streamlit application can be deployed using a Streamlit-compatible cloud environment.
 
-### The project requires:
+The deployment requires:
 
-GitHub repository
-app.py
-requirements.txt
-Required datasets
-Compatible Python environment
+- GitHub repository
+- `app.py`
+- `requirements.txt`
+- Required datasets
+- Compatible Python environment
 
 The application is designed to run as a Streamlit web application.
 
-## 💡 Key Project Highlights
+---
 
-The project combines multiple analytical areas into a single dashboard:
+# 💡 22. Key Project Highlights
 
-Retail Sales
-      +
-Inventory
-      +
-Stock Transfer
-      +
-Logistics
-      +
-Geospatial Analysis
-      +
-MSME Data
-      +
-Census Data
-      ↓
-Business Intelligence Dashboard
+The project combines multiple analytical areas into a single Business Intelligence dashboard:
 
-### Major Highlights
-
-Interactive dashboard
-Retail sales analysis
-Inventory analysis
-Stock movement analysis
-Geospatial visualization
-MSME analysis
-Census integration
-City-wise analysis
-SKU-level analysis
-Category analysis
-Interactive filters
-KPI cards
-Plotly visualizations
-GitHub version control
-
-## ⚠️ Data Limitations
-
-The dashboard is based on the datasets available in the project.
-
-Important limitations include:
-
-The original stock-transfer dataset does not provide explicit source and destination cities.
-Therefore, source-to-destination routes are not artificially generated.
-Stock-transfer analysis is based on city, SKU, date and quantity.
-Geospatial analysis depends on the geographical information available in the datasets.
-Census and MSME datasets provide supporting geographical and business context.
-Dashboard results depend on the quality and completeness of the source datasets.
-🔮 Future Scope
-
-The project can be extended with additional capabilities such as:
-
-Real-time sales data integration
-Real-time inventory monitoring
-Automated data pipelines
-Demand forecasting
-Sales forecasting
-Inventory replenishment recommendations
-Route optimization when source and destination data becomes available
-Delivery-time analysis
-Customer segmentation
-Advanced GIS analysis
-Geospatial clustering
-Machine Learning-based prediction
-Automated business alerts
-Database integration
-Role-based access
-Advanced analytics
-🎓 Academic Project Information
-
-Project Title:
-Geospatial Business Intelligence Dashboard
-
-Domain:
-Business Intelligence / Retail Analytics / Logistics / Geospatial Analytics
-
-Programming Language:
-Python
-
-Dashboard Framework:
-Streamlit
-
-Data Processing:
-Pandas, NumPy
-
-Visualization:
-Plotly
-
-Version Control:
-Git & GitHub
-
-📌 Project Status
-
-Status: Completed Academic Project
-
-The project currently includes:
-
-Retail Intelligence
-Geospatial Intelligence
-Logistics & Stock Transfer Intelligence
-Inventory Intelligence
-MSME Intelligence
-Census & Location Intelligence
-Interactive filters
-KPI cards
-Interactive charts
-Data tables
-Stock movement analysis
-Cleaned stock-transfer dataset
-GitHub repository
-Streamlit-compatible application
-
-## 🏁 Conclusion
-
-The Geospatial Business Intelligence Dashboard provides an interactive platform for analyzing retail, inventory, stock-transfer, logistics, geographical, MSME and demographic information.
-
-By integrating multiple datasets into a single Streamlit application, the project provides a consolidated environment for exploring business performance across cities, categories, products, SKUs, dates and geographical locations.
+- Retail Sales
+- Inventory
+- Stock Transfer
+- Logistics
+- Geospatial Analysis
+- MSME Data
+- Census and Demographic Information
 
 The project demonstrates the practical implementation of:
 
-Python
-Pandas
-NumPy
-Streamlit
-Plotly
+- Python
+- Pandas
+- NumPy
+- Streamlit
+- Plotly
+- Data Cleaning
+- Data Transformation
+- Business Intelligence
+- Geospatial Visualization
+- Interactive Dashboard Development
+
+---
+
+# 📌 23. Data Integrity & Limitations
+
+The dashboard is designed to remain consistent with the available source datasets.
+
+Important considerations:
+
+- The dashboard does not invent unavailable business information.
+- Stock-transfer routes are not artificially created.
+- Source and destination fields are not assumed when they are absent from the dataset.
+- Geographical analysis is based on the available geographical information.
+- Dashboard results depend on the quality and structure of the source datasets.
+- Filtered results change according to the selected dashboard filters.
+
+The stock-transfer component follows the actual structure of the available dataset.
+
+Since explicit source and destination fields are not available, the dashboard focuses on **city-wise stock movement analysis** rather than assumed route-level transfer analysis.
+
+---
+
+# 🎓 24. Academic Project
+
+This project was developed as an academic and educational Business Intelligence project.
+
+It demonstrates an end-to-end workflow starting from raw datasets and progressing through:
+
+```text
+Raw Data
+   ↓
 Data Cleaning
+   ↓
 Data Transformation
+   ↓
+Data Analysis
+   ↓
 Business Intelligence
-Geospatial Visualization
-Interactive Dashboard Development
+   ↓
+Interactive Visualization
+   ↓
+Streamlit Dashboard
+```
 
-The stock-transfer component follows the actual structure of the available dataset. Since explicit source and destination fields are not available, the dashboard performs City-wise Stock Movement Analysis rather than creating unsupported transfer routes.
+The project provides practical experience in handling multiple datasets and integrating them into a unified analytical dashboard.
 
-Overall, the project demonstrates an end-to-end Business Intelligence workflow starting from raw datasets, followed by data preprocessing, transformation, integration, analysis and interactive visualization.
+---
 
-## 👨‍💻 Author
+# 👨‍💻 25. Authors
 
-Ajaykumar Nishad | Anand Sahani | Nikhil Prajapati
+**Ajaykumar Nishad**  
+**Anand Sahani**  
+**Nikhil Prajapati**
 
-B.Tech Computer Science & Engineering (Data Science)
+**B.Tech Computer Science & Engineering (Data Science)**
 
-Lokmanya Tilak College of Engineering, Navi Mumbai
+**Lokmanya Tilak College of Engineering, Navi Mumbai**
 
-## 📜 License
+---
+
+# 📜 License
 
 This project is developed for academic and educational purposes.
+
+---
+
+# ✅ Conclusion
+
+The **Geospatial Business Intelligence Dashboard** provides a unified platform for analyzing retail sales, inventory, stock movement, logistics, geographical information, MSME data and demographic information.
+
+The project demonstrates how multiple datasets can be cleaned, transformed and integrated into an interactive Business Intelligence application using Python, Pandas, Plotly and Streamlit.
+
+The dashboard provides interactive filters, KPI indicators, charts, tables and geographical visualizations to support business data exploration.
+
+The stock-transfer analysis follows the structure of the available source data and focuses on city-wise stock movement without creating unsupported source-to-destination routes.
+
+Overall, the project demonstrates an end-to-end Business Intelligence workflow from **raw data to interactive dashboard visualization**.
