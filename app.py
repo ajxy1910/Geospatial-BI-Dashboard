@@ -15,9 +15,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# =========================================================
-# PATHS
-# =========================================================
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data" / "raw"
 
@@ -28,37 +25,29 @@ def normalize_name(value):
     return "".join(ch for ch in str(value).lower() if ch.isalnum())
 
 
-def find_file(filename):
-    # Look in data/raw first, then recursively under data/. This makes the
-    # dashboard tolerant of minor filename/path differences on Streamlit Cloud.
-    search_roots = [DATA_DIR, BASE_DIR / "data"]
-
-    target = normalize_name(filename)
-    for root in search_roots:
+def find_file(*filenames):
+    roots = [DATA_DIR, BASE_DIR / "data", BASE_DIR]
+    wanted = [normalize_name(x) for x in filenames]
+    for root in roots:
         if not root.exists():
             continue
-
-        exact = root / filename
-        if exact.exists() and exact.is_file():
-            return exact
-
-        candidates = [f for f in root.rglob("*") if f.is_file()]
-        for f in candidates:
-            if normalize_name(f.name) == target:
-                return f
-        for f in candidates:
-            name = normalize_name(f.name)
-            if target in name or name in target:
-                return f
-
+        for wanted_name, original in zip(wanted, filenames):
+            exact = root / original
+            if exact.exists() and exact.is_file():
+                return exact
+        files = [x for x in root.rglob("*") if x.is_file()]
+        for wanted_name in wanted:
+            for f in files:
+                n = normalize_name(f.name)
+                if n == wanted_name or wanted_name in n or n in wanted_name:
+                    return f
     return None
 
 
-def load_table(filename):
-    path = find_file(filename)
+def load_table(*filenames):
+    path = find_file(*filenames)
     if path is None:
         return pd.DataFrame()
-
     try:
         return pd.read_csv(path)
     except Exception:
@@ -71,28 +60,23 @@ def load_table(filename):
 def clean_columns(df):
     if df.empty:
         return df
-    df = df.copy()
-    df.columns = [str(c).strip().replace("\n", " ").replace("\r", " ") for c in df.columns]
-    return df
+    out = df.copy()
+    out.columns = [str(c).strip().replace("\n", " ").replace("\r", " ") for c in out.columns]
+    return out
 
 
 def find_col(df, possibilities):
     if df.empty:
         return None
-
-    normalized = {
-        normalize_name(c): c for c in df.columns
-    }
-
-    for possible in possibilities:
-        key = normalize_name(possible)
-        if key in normalized:
-            return normalized[key]
-
-    for possible in possibilities:
-        key = normalize_name(possible)
-        for norm, original in normalized.items():
-            if key in norm or norm in key:
+    normalized = {normalize_name(c): c for c in df.columns}
+    for p in possibilities:
+        k = normalize_name(p)
+        if k in normalized:
+            return normalized[k]
+    for p in possibilities:
+        k = normalize_name(p)
+        for n, original in normalized.items():
+            if k in n or n in k:
                 return original
     return None
 
@@ -101,58 +85,28 @@ def safe_number(series):
     return pd.to_numeric(series, errors="coerce").fillna(0)
 
 
-# A single chart wrapper with explicit unique keys prevents Streamlit duplicate
-# element IDs even if the app is rerun many times.
 def show_chart(fig, key, height=None):
-    if height is not None:
+    if height:
         fig.update_layout(height=height)
     st.plotly_chart(fig, width="stretch", key=key)
 
 
-# =========================================================
-# STOCK TRANSFER MATRIX PARSER
-# =========================================================
-def load_stock_transfer_matrix(filename):
-    """Load the supplied STOCK TRANSFER matrix safely.
+def empty_matrix_frame():
+    return pd.DataFrame(columns=["City", "SKU", "Date", "Quantity"])
 
-    Source layout:
-      Row 0 -> city block names (Pune, Aurangabad, Nasik)
-      Row 1 -> dates for each city block
-      Row 2+ -> SKU quantities
 
-    Output:
-      City | SKU | Date | Transfer Quantity
+def parse_city_matrix(filename, quantity_name="Quantity"):
+    """Parse the project's city-block matrix format.
 
-    A cleaned 4-column file is preferred when present because it is more
-    reliable for deployment, but the original matrix is also supported.
+    Expected layout:
+      row 0: city names at the start of each block
+      row 1: dates across each block
+      col 0: SKU names
+      row 2+: quantities
     """
-    # Preferred deployment-safe cleaned file.
-    cleaned_candidates = [
-        DATA_DIR / "stock_transfer_cleaned.csv",
-        BASE_DIR / "stock_transfer_cleaned.csv",
-    ]
-    for cleaned_path in cleaned_candidates:
-        if cleaned_path.exists():
-            try:
-                cleaned = pd.read_csv(cleaned_path)
-                cleaned.columns = [str(c).strip() for c in cleaned.columns]
-                required = {"City", "SKU", "Date", "Transfer Quantity"}
-                if required.issubset(set(cleaned.columns)):
-                    cleaned["Date"] = pd.to_datetime(cleaned["Date"], errors="coerce")
-                    cleaned["Transfer Quantity"] = pd.to_numeric(
-                        cleaned["Transfer Quantity"], errors="coerce"
-                    )
-                    cleaned = cleaned.dropna(subset=["City", "SKU", "Date", "Transfer Quantity"]).copy()
-                    if not cleaned.empty:
-                        cleaned["City"] = cleaned["City"].astype(str).str.strip()
-                        cleaned["SKU"] = cleaned["SKU"].astype(str).str.strip()
-                        return cleaned[["City", "SKU", "Date", "Transfer Quantity"]]
-            except Exception:
-                pass
-
     path = find_file(filename)
     if path is None:
-        return pd.DataFrame(columns=["City", "SKU", "Date", "Transfer Quantity"])
+        return empty_matrix_frame()
 
     try:
         raw = pd.read_csv(path, header=None)
@@ -160,68 +114,74 @@ def load_stock_transfer_matrix(filename):
         try:
             raw = pd.read_excel(path, header=None)
         except Exception:
-            return pd.DataFrame(columns=["City", "SKU", "Date", "Transfer Quantity"])
+            return empty_matrix_frame()
 
     if raw.shape[0] < 3 or raw.shape[1] < 2:
-        return pd.DataFrame(columns=["City", "SKU", "Date", "Transfer Quantity"])
+        return empty_matrix_frame()
 
-    # Detect city starts from row 0. Ignore the first label cell ("City").
     city_starts = []
     for col in range(raw.shape[1]):
-        value = raw.iat[0, col]
-        if pd.isna(value):
+        v = raw.iat[0, col]
+        if pd.isna(v):
             continue
-        city = str(value).strip()
-        if not city or city.lower() in {"city", "sku", "date", "nan"}:
-            continue
-        city_starts.append((col, city))
+        city = str(v).strip()
+        if city and city.lower() not in {"city", "sku", "date", "nan"}:
+            city_starts.append((col, city))
 
     if not city_starts:
-        return pd.DataFrame(columns=["City", "SKU", "Date", "Transfer Quantity"])
+        return empty_matrix_frame()
 
-    records = []
     aliases = {
         "nasik": "Nashik",
         "nashik": "Nashik",
         "aurangabad": "Aurangabad",
+        "chhatrapati sambhajinagar": "Aurangabad",
         "pune": "Pune",
     }
+    records = []
 
-    for idx, (start_col, raw_city) in enumerate(city_starts):
-        end_col = city_starts[idx + 1][0] if idx + 1 < len(city_starts) else raw.shape[1]
-        city = aliases.get(raw_city.strip().lower(), raw_city.strip())
-
+    for i, (start, raw_city) in enumerate(city_starts):
+        end = city_starts[i + 1][0] if i + 1 < len(city_starts) else raw.shape[1]
+        city = aliases.get(raw_city.lower(), raw_city)
         for row in range(2, raw.shape[0]):
             sku_value = raw.iat[row, 0]
             if pd.isna(sku_value) or not str(sku_value).strip():
                 continue
             sku_value = str(sku_value).strip()
-
-            for col in range(start_col, end_col):
+            for col in range(start, end):
                 dt = pd.to_datetime(raw.iat[1, col], errors="coerce")
                 qty = pd.to_numeric(raw.iat[row, col], errors="coerce")
                 if pd.isna(dt) or pd.isna(qty):
                     continue
                 records.append((city, sku_value, dt, float(qty)))
 
-    return pd.DataFrame(
-        records,
-        columns=["City", "SKU", "Date", "Transfer Quantity"],
-    )
+    out = pd.DataFrame(records, columns=["City", "SKU", "Date", quantity_name])
+    return out
 
 
-# =========================================================
-# CITY COORDINATES
-# =========================================================
+def load_transfer():
+    # Prefer the normalized file if it exists.
+    path = find_file("stock_transfer_cleaned.csv")
+    if path is not None:
+        try:
+            df = pd.read_csv(path)
+            df.columns = [str(c).strip() for c in df.columns]
+            if {"City", "SKU", "Date", "Transfer Quantity"}.issubset(df.columns):
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+                df["Transfer Quantity"] = safe_number(df["Transfer Quantity"])
+                return df.dropna(subset=["Date"])
+        except Exception:
+            pass
+    return parse_city_matrix("STOCK TRANSFER.csv", "Transfer Quantity")
+
+
 CITY_COORDINATES = {
     "Mumbai": (19.0760, 72.8777),
     "Thane": (19.2183, 72.9781),
     "Navi Mumbai": (19.0330, 73.0297),
     "Pune": (18.5204, 73.8567),
     "Nashik": (19.9975, 73.7898),
-    "Nasik": (19.9975, 73.7898),
     "Aurangabad": (19.8762, 75.3433),
-    "Chhatrapati Sambhajinagar": (19.8762, 75.3433),
     "Nagpur": (21.1458, 79.0882),
     "Kolhapur": (16.7050, 74.2433),
     "Solapur": (17.6599, 75.9064),
@@ -233,23 +193,64 @@ CITY_COORDINATES = {
     "Jalgaon": (21.0077, 75.5626),
 }
 
+
+def add_coordinates(df, city_col_name="City"):
+    out = df.copy()
+    out["Latitude"] = out[city_col_name].map(lambda x: CITY_COORDINATES.get(str(x), (np.nan, np.nan))[0])
+    out["Longitude"] = out[city_col_name].map(lambda x: CITY_COORDINATES.get(str(x), (np.nan, np.nan))[1])
+    return out.dropna(subset=["Latitude", "Longitude"])
+
+
+def geo_bubble_map(df, city_col_name, value_col, title, key, height=500):
+    geo = add_coordinates(df, city_col_name)
+    if geo.empty:
+        st.info("No mapped city coordinates are available for this selection.")
+        return
+
+    fig = px.scatter_geo(
+        geo,
+        lat="Latitude",
+        lon="Longitude",
+        size=value_col,
+        color=value_col,
+        hover_name=city_col_name,
+        hover_data={value_col: ":,.0f", "Latitude": False, "Longitude": False},
+        projection="mercator",
+        title=title,
+    )
+    fig.update_traces(marker=dict(opacity=0.82, line=dict(width=1)))
+    fig.update_geos(
+        showland=True,
+        landcolor="lightgray",
+        showocean=True,
+        oceancolor="aliceblue",
+        showcountries=True,
+        showcoastlines=True,
+        fitbounds="locations",
+        lonaxis_range=[70, 81],
+        lataxis_range=[15, 23],
+    )
+    fig.update_layout(margin=dict(l=0, r=0, t=55, b=0), legend_title_text="Intensity")
+    show_chart(fig, key, height)
+
+
 # =========================================================
-# LOAD DATASETS
+# LOAD DATA
 # =========================================================
 sales = clean_columns(load_table("Sales.csv"))
 sku = clean_columns(load_table("SKU MASTER.csv"))
-opening = clean_columns(load_table("Opening Stock.csv"))
-transfer = load_stock_transfer_matrix("STOCK TRANSFER.csv")
+opening = parse_city_matrix("Opening Stock.csv", "Opening Stock")
+transfer = load_transfer()
 census = clean_columns(load_table("census2011.csv"))
 districts = clean_columns(load_table("maharashtra-districts.csv"))
 msme = clean_columns(load_table("district_level_total_Registered_msme.csv"))
 
 if sales.empty:
-    st.error("Sales.csv could not be loaded. Check that it exists inside data/raw/.")
+    st.error("Sales.csv could not be loaded. Put it inside data/raw/ and restart the app.")
     st.stop()
 
 # =========================================================
-# SALES COLUMN DETECTION
+# SALES PREPARATION
 # =========================================================
 date_col = find_col(sales, ["Date", "transaction_date", "sales_date"])
 sku_col = find_col(sales, ["SKU", "product_code", "item_code"])
@@ -257,12 +258,8 @@ product_col = find_col(sales, ["Product Name", "Product", "Description", "produc
 city_col = find_col(sales, ["City", "Location"])
 sales_col = find_col(sales, ["Sales", "Quantity", "Units Sold", "Units", "Qty"])
 
-# =========================================================
-# SALES CLEANING + SKU MASTER MERGE
-# =========================================================
 if date_col:
     sales[date_col] = pd.to_datetime(sales[date_col], errors="coerce")
-
 if sales_col:
     sales[sales_col] = safe_number(sales[sales_col])
 else:
@@ -270,66 +267,54 @@ else:
     sales_col = "Sales"
 
 if sku_col and not sku.empty:
-    sku_sku_col = find_col(sku, ["SKU", "product_code", "item_code"])
+    sku_key = find_col(sku, ["SKU", "product_code", "item_code"])
     category_col = find_col(sku, ["Category"])
     price_col = find_col(sku, ["Price", "Unit Price"])
     desc_col = find_col(sku, ["Description", "Product Name", "Product"])
-
-    if sku_sku_col:
-        merge_cols = [sku_sku_col]
-        for c in [category_col, price_col, desc_col]:
-            if c and c not in merge_cols:
-                merge_cols.append(c)
-
-        sku_temp = sku[merge_cols].drop_duplicates(subset=[sku_sku_col]).copy()
-        rename_map = {}
+    if sku_key:
+        cols = [sku_key] + [c for c in [category_col, price_col, desc_col] if c and c != sku_key]
+        sm = sku[cols].drop_duplicates(subset=[sku_key]).copy()
+        rename = {}
         if category_col:
-            rename_map[category_col] = "Category"
+            rename[category_col] = "Category"
         if price_col:
-            rename_map[price_col] = "Price"
+            rename[price_col] = "Price"
         if desc_col:
-            rename_map[desc_col] = "SKU Description"
-        sku_temp = sku_temp.rename(columns=rename_map)
-
+            rename[desc_col] = "SKU Description"
+        sm = sm.rename(columns=rename)
         for c in ["Category", "Price", "SKU Description"]:
             if c in sales.columns:
                 sales = sales.drop(columns=c)
-
-        sales = sales.merge(
-            sku_temp,
-            left_on=sku_col,
-            right_on=sku_sku_col,
-            how="left",
-        )
+        sales = sales.merge(sm, left_on=sku_col, right_on=sku_key, how="left")
 
 if "Category" not in sales.columns:
     sales["Category"] = "Unknown"
 if "Price" not in sales.columns:
     sales["Price"] = 0
-
 sales["Category"] = sales["Category"].fillna("Unknown").astype(str)
 sales["Price"] = safe_number(sales["Price"])
 sales["Revenue"] = sales[sales_col] * sales["Price"]
 
 # =========================================================
-# SIDEBAR - ONLY ONE INSTANCE
+# SIDEBAR FILTERS — SINGLE INSTANCE
 # =========================================================
 st.sidebar.title("🎛️ Dashboard Filters")
+st.sidebar.caption("Filters apply to the retail sales analysis.")
 
 available_cities = sorted(sales[city_col].dropna().astype(str).unique()) if city_col else []
 selected_cities = st.sidebar.multiselect(
     "Select City",
-    options=available_cities,
+    available_cities,
     default=available_cities,
-    key="dashboard_city_filter",
+    key="city_filter_main",
 )
 
 available_categories = sorted(sales["Category"].dropna().astype(str).unique())
 selected_categories = st.sidebar.multiselect(
     "Select Category",
-    options=available_categories,
+    available_categories,
     default=available_categories,
-    key="dashboard_category_filter",
+    key="category_filter_main",
 )
 
 selected_dates = None
@@ -341,450 +326,229 @@ if date_col and sales[date_col].notna().any():
         value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date,
-        key="dashboard_date_filter",
+        key="date_filter_main",
     )
 
-# =========================================================
-# APPLY FILTERS
-# =========================================================
 filtered = sales.copy()
-
 if city_col and selected_cities:
     filtered = filtered[filtered[city_col].astype(str).isin(selected_cities)]
-
 if selected_categories:
     filtered = filtered[filtered["Category"].astype(str).isin(selected_categories)]
-
 if date_col and selected_dates:
     if isinstance(selected_dates, (tuple, list)) and len(selected_dates) == 2:
-        start_date = pd.Timestamp(selected_dates[0])
-        end_date = pd.Timestamp(selected_dates[1]) + pd.Timedelta(days=1)
-        filtered = filtered[(filtered[date_col] >= start_date) & (filtered[date_col] < end_date)]
+        start = pd.Timestamp(selected_dates[0])
+        end = pd.Timestamp(selected_dates[1]) + pd.Timedelta(days=1)
+        filtered = filtered[(filtered[date_col] >= start) & (filtered[date_col] < end)]
     else:
-        one_date = pd.Timestamp(selected_dates)
-        filtered = filtered[filtered[date_col].dt.date == one_date.date()]
+        d = pd.Timestamp(selected_dates)
+        filtered = filtered[filtered[date_col].dt.date == d.date()]
 
 # =========================================================
 # HEADER
 # =========================================================
 st.title("🗺️ Retail & Geospatial Business Intelligence Dashboard")
-st.markdown(
-    "**Retail Sales • Inventory • Logistics • MSME • Census • Maharashtra Geospatial Analysis**"
-)
+st.markdown("**Retail Sales • Inventory • Logistics • MSME • Census • Maharashtra Geospatial Analysis**")
 st.divider()
 
 # =========================================================
 # EXECUTIVE OVERVIEW
 # =========================================================
 st.header("🏠 Executive Overview")
-
-total_units = filtered[sales_col].sum()
-total_revenue = filtered["Revenue"].sum()
-products = filtered[sku_col].nunique() if sku_col and sku_col in filtered.columns else (
-    filtered[product_col].nunique() if product_col and product_col in filtered.columns else 0
-)
-cities_count = filtered[city_col].nunique() if city_col and city_col in filtered.columns else 0
+units = filtered[sales_col].sum()
+revenue = filtered["Revenue"].sum()
+product_count = filtered[sku_col].nunique() if sku_col and sku_col in filtered.columns else filtered[product_col].nunique() if product_col and product_col in filtered.columns else 0
+city_count = filtered[city_col].nunique() if city_col and city_col in filtered.columns else 0
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("🛒 Total Units Sold", f"{total_units:,.0f}")
-c2.metric("💰 Total Revenue", f"₹{total_revenue:,.0f}")
-c3.metric("📦 Products", f"{products:,}")
-c4.metric("🏙️ Cities", f"{cities_count:,}")
+c1.metric("🛒 Total Units Sold", f"{units:,.0f}")
+c2.metric("💰 Total Revenue", f"₹{revenue:,.0f}")
+c3.metric("📦 Products", f"{product_count:,}")
+c4.metric("🏙️ Cities", f"{city_count:,}")
 
 # =========================================================
 # RETAIL INTELLIGENCE
 # =========================================================
 st.header("🛍️ Retail Intelligence")
-
-col1, col2 = st.columns(2)
-with col1:
-    if date_col and sales_col and not filtered.empty:
-        daily_sales = filtered.groupby(date_col, as_index=False)[sales_col].sum()
-        fig = px.line(daily_sales, x=date_col, y=sales_col, markers=True, title="Daily Sales Trend")
-        show_chart(fig, "retail_daily_sales")
-    else:
-        st.info("Daily sales trend is not available for the current selection.")
-
-with col2:
-    if city_col and sales_col and not filtered.empty:
-        city_sales = (
-            filtered.groupby(city_col, as_index=False)[sales_col]
-            .sum()
-            .sort_values(sales_col, ascending=False)
-        )
+r1, r2 = st.columns(2)
+with r1:
+    if date_col and not filtered.empty:
+        daily = filtered.groupby(date_col, as_index=False)[sales_col].sum()
+        fig = px.line(daily, x=date_col, y=sales_col, markers=True, title="Daily Sales Trend")
+        show_chart(fig, "chart_daily_sales")
+with r2:
+    if city_col and not filtered.empty:
+        city_sales = filtered.groupby(city_col, as_index=False)[sales_col].sum().sort_values(sales_col, ascending=False)
         fig = px.bar(city_sales, x=city_col, y=sales_col, text=sales_col, title="City-wise Sales")
-        show_chart(fig, "retail_city_sales")
+        show_chart(fig, "chart_city_sales")
 
-col3, col4 = st.columns(2)
-with col3:
-    category_sales = (
-        filtered.groupby("Category", as_index=False)[sales_col]
-        .sum()
-        .sort_values(sales_col, ascending=False)
-    )
-    fig = px.bar(
-        category_sales,
-        x=sales_col,
-        y="Category",
-        orientation="h",
-        text=sales_col,
-        title="Category-wise Sales",
-    )
-    show_chart(fig, "retail_category_sales")
-
-with col4:
-    category_revenue = (
-        filtered.groupby("Category", as_index=False)["Revenue"]
-        .sum()
-        .sort_values("Revenue", ascending=False)
-    )
-    fig = px.pie(
-        category_revenue,
-        names="Category",
-        values="Revenue",
-        hole=0.45,
-        title="Revenue Distribution by Category",
-    )
-    show_chart(fig, "retail_category_revenue")
-
-# =========================================================
-# TOP PRODUCTS
-# =========================================================
-st.subheader("🏆 Top 10 Products")
-if product_col and product_col in filtered.columns and not filtered.empty:
-    top_products = (
-        filtered.groupby(product_col, as_index=False)[sales_col]
-        .sum()
-        .sort_values(sales_col, ascending=False)
-        .head(10)
-    )
-    fig = px.bar(
-        top_products.sort_values(sales_col),
-        x=sales_col,
-        y=product_col,
-        orientation="h",
-        text=sales_col,
-        title="Top 10 Products by Units Sold",
-    )
-    show_chart(fig, "retail_top_products")
-else:
-    st.info("Product-level information is not available.")
+r3, r4 = st.columns(2)
+with r3:
+    cat_sales = filtered.groupby("Category", as_index=False)[sales_col].sum().sort_values(sales_col, ascending=False)
+    fig = px.bar(cat_sales, x=sales_col, y="Category", orientation="h", text=sales_col, title="Category-wise Sales")
+    show_chart(fig, "chart_category_sales")
+with r4:
+    if sku_col and not filtered.empty:
+        top_sku = filtered.groupby(sku_col, as_index=False)[sales_col].sum().sort_values(sales_col, ascending=False).head(10)
+        fig = px.bar(top_sku.sort_values(sales_col), x=sales_col, y=sku_col, orientation="h", text=sales_col, title="Top 10 Products / SKUs")
+        show_chart(fig, "chart_top_skus")
 
 # =========================================================
 # GEOSPATIAL INTELLIGENCE
 # =========================================================
 st.header("🗺️ Geospatial Intelligence")
-st.markdown(
-    "This section connects **retail sales with geographical location** using city coordinates. "
-    "Marker size represents sales and marker colour represents revenue."
-)
+st.write("Retail performance is connected with city location to identify geographic concentration of demand and revenue.")
 
 if city_col and not filtered.empty:
-    geo_agg = {"Sales": (sales_col, "sum"), "Revenue": ("Revenue", "sum")}
-    if sku_col and sku_col in filtered.columns:
-        geo_agg["Products"] = (sku_col, "nunique")
-
-    geo_sales = filtered.groupby(city_col).agg(**geo_agg).reset_index()
-    geo_sales["Latitude"] = geo_sales[city_col].map(
-        lambda x: CITY_COORDINATES.get(str(x), (np.nan, np.nan))[0]
-    )
-    geo_sales["Longitude"] = geo_sales[city_col].map(
-        lambda x: CITY_COORDINATES.get(str(x), (np.nan, np.nan))[1]
-    )
-    geo_sales = geo_sales.dropna(subset=["Latitude", "Longitude"])
-
-    if not geo_sales.empty:
-        max_sales = max(float(geo_sales["Sales"].max()), 1.0)
-        marker_sizes = 18 + (geo_sales["Sales"] / max_sales * 42)
-
-        custom_columns = [geo_sales["Sales"], geo_sales["Revenue"]]
-        if "Products" in geo_sales.columns:
-            custom_columns.append(geo_sales["Products"])
-        else:
-            custom_columns.append(pd.Series(0, index=geo_sales.index))
-
-        fig = go.Figure(
-            go.Scattergeo(
-                lat=geo_sales["Latitude"],
-                lon=geo_sales["Longitude"],
-                mode="markers+text",
-                text=geo_sales[city_col].astype(str),
-                textposition="top center",
-                marker=dict(
-                    size=marker_sizes,
-                    color=geo_sales["Revenue"],
-                    colorscale="Blues",
-                    showscale=True,
-                    colorbar=dict(title="Revenue"),
-                    line=dict(width=1),
-                    opacity=0.85,
-                ),
-                customdata=np.column_stack(custom_columns),
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Sales: %{customdata[0]:,.0f}<br>"
-                    "Revenue: ₹%{customdata[1]:,.0f}<br>"
-                    "Products: %{customdata[2]:,.0f}<extra></extra>"
-                ),
-                name="Retail Locations",
-            )
-        )
-        fig.update_geos(
-            scope="asia",
-            projection_type="mercator",
-            showland=True,
-            showcountries=True,
-            showcoastlines=True,
-            showocean=True,
-            landcolor="lightgray",
-            oceancolor="lightblue",
-            coastlinecolor="gray",
-            countrycolor="gray",
-            center=dict(lat=19.2, lon=75.0),
-            lataxis_range=[15.0, 23.0],
-            lonaxis_range=[70.0, 81.0],
-        )
-        fig.update_layout(title="📍 Retail Sales & Revenue by Location", margin=dict(l=0, r=0, t=60, b=0))
-        show_chart(fig, "geospatial_retail_map", height=620)
-
-        st.subheader("📍 Geospatial Sales Summary")
-        geo_display = geo_sales[
-            [city_col, "Sales", "Revenue"] + (["Products"] if "Products" in geo_sales.columns else [])
-        ].sort_values("Sales", ascending=False)
-        st.dataframe(geo_display, width="stretch")
+    geo = filtered.groupby(city_col).agg(Sales=(sales_col, "sum"), Revenue=("Revenue", "sum"), Products=(sku_col, "nunique") if sku_col else (sales_col, "count")).reset_index()
+    geo = add_coordinates(geo, city_col)
+    if not geo.empty:
+        geo_bubble_map(geo, city_col, "Sales", "Retail Sales by City", "map_retail_sales", 540)
+        st.subheader("📍 City-wise Geospatial Summary")
+        st.dataframe(geo.sort_values("Sales", ascending=False), width="stretch")
     else:
-        st.warning("No matching city coordinates were found for the selected cities.")
-else:
-    st.info("City information is not available for geospatial analysis.")
+        st.info("No city coordinates matched the selected retail cities.")
 
 # =========================================================
-# MSME / BUSINESS DENSITY
-# =========================================================
-st.header("🏢 MSME / Business Density Intelligence")
-if not msme.empty:
-    msme_district = find_col(msme, ["District", "District Name", "district_name"])
-    msme_value = find_col(msme, ["Total", "Total Registered MSME", "Registered MSME", "MSME", "Count"])
-
-    if msme_district and msme_value:
-        msme[msme_value] = safe_number(msme[msme_value])
-        msm_plot = (
-            msme.groupby(msme_district, as_index=False)[msme_value]
-            .sum()
-            .sort_values(msme_value, ascending=False)
-            .head(20)
-        )
-        fig = px.bar(
-            msm_plot,
-            x=msme_value,
-            y=msme_district,
-            orientation="h",
-            text=msme_value,
-            title="Top Districts by Registered MSMEs",
-        )
-        show_chart(fig, "msme_districts")
-    else:
-        st.info("MSME dataset loaded, but district/count columns could not be mapped automatically.")
-else:
-    st.info("MSME dataset not available.")
-
-# =========================================================
-# LOGISTICS INTELLIGENCE
+# LOGISTICS
 # =========================================================
 st.header("🚚 Logistics & Stock Transfer Intelligence")
 
 if not transfer.empty:
-    st.info(
-        "The STOCK TRANSFER file is a city-wise matrix. It contains SKU quantities by date "
-        "for Pune, Aurangabad and Nasik/Nashik. It does not contain explicit source and "
-        "destination fields, so the dashboard does not invent transfer routes."
-    )
+    st.info("Stock-transfer data is provided as city-wise SKU quantities by date for Pune, Aurangabad and Nashik. The source file has no explicit source/destination route fields, so routes are not invented.")
 
-    transfer_city = (
-        transfer.groupby("City", as_index=False)["Transfer Quantity"]
-        .sum()
-        .sort_values("Transfer Quantity", ascending=False)
-    )
-    transfer_sku = (
-        transfer.groupby("SKU", as_index=False)["Transfer Quantity"]
-        .sum()
-        .sort_values("Transfer Quantity", ascending=False)
-    )
+    transfer_city = transfer.groupby("City", as_index=False)["Transfer Quantity"].sum().sort_values("Transfer Quantity", ascending=False)
+    transfer_sku = transfer.groupby("SKU", as_index=False)["Transfer Quantity"].sum().sort_values("Transfer Quantity", ascending=False)
 
     l1, l2, l3 = st.columns(3)
     l1.metric("Total Transfer Quantity", f"{transfer['Transfer Quantity'].sum():,.0f}")
     l2.metric("Cities Covered", f"{transfer['City'].nunique():,}")
     l3.metric("SKUs Covered", f"{transfer['SKU'].nunique():,}")
 
-    st.subheader("🏙️ City-wise Stock Transfer")
-    fig = px.bar(
-        transfer_city,
-        x="City",
-        y="Transfer Quantity",
-        text="Transfer Quantity",
-        title="Stock Transfer / Allocation by City",
-    )
-    show_chart(fig, "logistics_city_transfer")
+    a, b = st.columns(2)
+    with a:
+        fig = px.bar(transfer_city, x="City", y="Transfer Quantity", text="Transfer Quantity", title="City-wise Stock Transfer")
+        show_chart(fig, "chart_transfer_city")
+    with b:
+        fig = px.bar(transfer_sku.head(10).sort_values("Transfer Quantity"), x="Transfer Quantity", y="SKU", orientation="h", text="Transfer Quantity", title="Top 10 SKUs by Transfer Quantity")
+        show_chart(fig, "chart_transfer_sku")
 
     st.subheader("🗺️ Stock Transfer Intensity Map")
-    transfer_map = transfer_city.copy()
-    transfer_map["Latitude"] = transfer_map["City"].map(
-        lambda x: CITY_COORDINATES.get(str(x), (np.nan, np.nan))[0]
-    )
-    transfer_map["Longitude"] = transfer_map["City"].map(
-        lambda x: CITY_COORDINATES.get(str(x), (np.nan, np.nan))[1]
-    )
-    transfer_map = transfer_map.dropna(subset=["Latitude", "Longitude"])
+    geo_bubble_map(transfer_city, "City", "Transfer Quantity", "City-wise Stock Transfer Intensity", "map_transfer_intensity", 520)
+    st.caption("Bubble size and intensity represent total transfer quantity. This is a city-level intensity map, not a route/network map.")
 
-    if not transfer_map.empty:
-        fig = go.Figure(
-            go.Scattergeo(
-                lat=transfer_map["Latitude"],
-                lon=transfer_map["Longitude"],
-                mode="markers+text",
-                text=transfer_map["City"],
-                textposition="top center",
-                marker=dict(
-                    size=np.maximum(18, np.sqrt(transfer_map["Transfer Quantity"]) * 1.5),
-                    opacity=0.85,
-                ),
-                customdata=np.column_stack([transfer_map["Transfer Quantity"]]),
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Transfer Quantity: %{customdata[0]:,.0f}<extra></extra>"
-                ),
-                showlegend=False,
-            )
-        )
-        fig.update_geos(
-            scope="asia",
-            projection_type="mercator",
-            showland=True,
-            showcountries=True,
-            showcoastlines=True,
-            showocean=True,
-            center=dict(lat=19.2, lon=75.0),
-            lataxis_range=[15.0, 23.0],
-            lonaxis_range=[70.0, 81.0],
-        )
-        fig.update_layout(title="City-wise Stock Transfer Intensity", margin=dict(l=0, r=0, t=50, b=0))
-        show_chart(fig, "logistics_transfer_map", height=600)
-
-    st.subheader("📦 Top SKUs by Transfer Quantity")
-    fig = px.bar(
-        transfer_sku.head(10).sort_values("Transfer Quantity"),
-        x="Transfer Quantity",
-        y="SKU",
-        orientation="h",
-        text="Transfer Quantity",
-        title="Top 10 SKUs by Stock Transfer Quantity",
-    )
-    show_chart(fig, "logistics_top_skus")
-
-    st.subheader("📋 Transfer Data")
-    st.dataframe(
-        transfer.sort_values(["Date", "City", "SKU"]).head(100),
-        width="stretch",
-    )
+    with st.expander("📋 View Transfer Records"):
+        st.dataframe(transfer.sort_values(["Date", "City", "SKU"]).head(200), width="stretch", height=420)
 else:
-    st.warning("STOCK TRANSFER dataset not found or could not be parsed.")
+    st.warning("STOCK TRANSFER dataset could not be loaded. Keep STOCK TRANSFER.csv or stock_transfer_cleaned.csv inside data/raw/.")
 
 # =========================================================
-# INVENTORY INTELLIGENCE
+# INVENTORY
 # =========================================================
 st.header("📦 Inventory Intelligence")
 if not opening.empty:
-    st.write(f"Opening Stock Records: {len(opening):,}")
-    st.dataframe(opening.head(20), width="stretch")
+    inv_city = opening.groupby("City", as_index=False)["Opening Stock"].sum().sort_values("Opening Stock", ascending=False)
+    inv_sku = opening.groupby("SKU", as_index=False)["Opening Stock"].sum().sort_values("Opening Stock", ascending=False)
+    i1, i2, i3 = st.columns(3)
+    i1.metric("Opening Stock", f"{opening['Opening Stock'].sum():,.0f}")
+    i2.metric("Cities Covered", f"{opening['City'].nunique():,}")
+    i3.metric("SKUs Covered", f"{opening['SKU'].nunique():,}")
+    q1, q2 = st.columns(2)
+    with q1:
+        fig = px.bar(inv_city, x="City", y="Opening Stock", text="Opening Stock", title="Opening Stock by City")
+        show_chart(fig, "chart_opening_city")
+    with q2:
+        fig = px.bar(inv_sku.head(10).sort_values("Opening Stock"), x="Opening Stock", y="SKU", orientation="h", text="Opening Stock", title="Top 10 SKUs by Opening Stock")
+        show_chart(fig, "chart_opening_sku")
+    with st.expander("📋 View Opening Stock Records"):
+        st.dataframe(opening.sort_values(["Date", "City", "SKU"]).head(200), width="stretch", height=420)
 else:
-    st.info("Opening Stock dataset not available.")
+    st.info("Opening Stock dataset could not be parsed.")
 
 # =========================================================
-# URBAN / CENSUS INTELLIGENCE
+# MSME / BUSINESS DENSITY
 # =========================================================
-st.header("🏙️ Urban Planning Intelligence")
+st.header("🏢 MSME / Business Density Intelligence")
+if not msme.empty:
+    md = find_col(msme, ["district_name", "District", "District Name"])
+    mv = find_col(msme, ["total", "Total", "Registered MSME", "MSME"])
+    if md and mv:
+        msme_plot = msme.copy()
+        msme_plot[mv] = safe_number(msme_plot[mv])
+        if "state_name" in msme_plot.columns:
+            state = msme_plot["state_name"].astype(str).str.lower()
+            if state.str.contains("maharashtra").any():
+                msme_plot = msme_plot[state.str.contains("maharashtra")]
+        msme_plot = msme_plot.groupby(md, as_index=False)[mv].sum().sort_values(mv, ascending=False).head(15)
+        fig = px.bar(msme_plot.sort_values(mv), x=mv, y=md, orientation="h", text=mv, title="Top Districts by Registered MSMEs")
+        show_chart(fig, "chart_msme_districts")
+    else:
+        st.info("MSME dataset loaded, but district/count fields could not be identified.")
+else:
+    st.info("MSME dataset not available.")
+
+# =========================================================
+# CENSUS / URBAN INTELLIGENCE
+# =========================================================
+st.header("🏙️ Census & Urban Intelligence")
 if not census.empty:
-    numeric_cols = census.select_dtypes(include=np.number).columns.tolist()
-    if numeric_cols:
-        selected_numeric = st.selectbox(
-            "Select Census Indicator",
-            numeric_cols,
-            key="census_indicator",
-        )
-        urban_summary = census[selected_numeric].describe().to_frame().T
-        st.dataframe(urban_summary, width="stretch")
-        st.caption("Census indicators provide demographic context for location and market analysis.")
+    cdf = census.copy()
+    if "State" in cdf.columns:
+        state = cdf["State"].astype(str).str.lower()
+        if state.str.contains("maharashtra").any():
+            cdf = cdf[state.str.contains("maharashtra")]
+    numeric = cdf.select_dtypes(include=np.number).columns.tolist()
+    if numeric:
+        indicator = st.selectbox("Select Census Indicator", numeric, key="census_indicator_main")
+        summary = cdf[[indicator]].describe().T
+        st.dataframe(summary, width="stretch")
+        if "District" in cdf.columns:
+            top_census = cdf[["District", indicator]].dropna().sort_values(indicator, ascending=False).head(15)
+            fig = px.bar(top_census.sort_values(indicator), x=indicator, y="District", orientation="h", text=indicator, title=f"Top Districts by {indicator}")
+            show_chart(fig, "chart_census_indicator")
     else:
         st.info("No numeric Census indicators were detected.")
 else:
-    st.warning("Census dataset not found.")
+    st.info("Census dataset not available.")
 
 # =========================================================
 # LOCATION INTELLIGENCE
 # =========================================================
 st.header("📍 Location Intelligence")
-st.markdown(
-    "### Business Opportunity Analysis\n\n"
-    "Location intelligence combines **Retail Demand + Business Presence + Population + Geography** "
-    "to support further business analysis."
-)
-
+st.write("Combines retail demand, revenue and product coverage at city level for business-location analysis.")
 if city_col and not filtered.empty:
-    location_agg = {"Units_Sold": (sales_col, "sum"), "Revenue": ("Revenue", "sum")}
-    if sku_col and sku_col in filtered.columns:
-        location_agg["Products"] = (sku_col, "nunique")
-
-    location_analysis = filtered.groupby(city_col).agg(**location_agg).reset_index()
-    location_analysis["Revenue_per_Unit"] = (
-        location_analysis["Revenue"] / location_analysis["Units_Sold"].replace(0, np.nan)
-    )
-    location_analysis = location_analysis.sort_values("Revenue", ascending=False)
-    st.dataframe(location_analysis, width="stretch")
+    agg = {"Units Sold": (sales_col, "sum"), "Revenue": ("Revenue", "sum")}
+    if sku_col:
+        agg["Products"] = (sku_col, "nunique")
+    loc = filtered.groupby(city_col).agg(**agg).reset_index()
+    loc["Revenue per Unit"] = loc["Revenue"] / loc["Units Sold"].replace(0, np.nan)
+    st.dataframe(loc.sort_values("Revenue", ascending=False), width="stretch")
 
 # =========================================================
-# FILTERED SALES DATA
-# =========================================================
-st.header("📋 Filtered Sales Data")
-st.dataframe(filtered, width="stretch", height=500)
-
-# =========================================================
-# DATASET SUMMARY
+# DATASET INFORMATION / METHODOLOGY
 # =========================================================
 with st.expander("📂 Dataset Information"):
-    dataset_info = pd.DataFrame(
-        {
-            "Dataset": [
-                "Sales",
-                "SKU Master",
-                "Opening Stock",
-                "Stock Transfer",
-                "Census 2011",
-                "Maharashtra Districts",
-                "Registered MSME",
-            ],
-            "Rows": [
-                len(sales),
-                len(sku),
-                len(opening),
-                len(transfer),
-                len(census),
-                len(districts),
-                len(msme),
-            ],
-            "Status": [
-                "Loaded" if not sales.empty else "Missing",
-                "Loaded" if not sku.empty else "Missing",
-                "Loaded" if not opening.empty else "Missing",
-                "Loaded" if not transfer.empty else "Missing",
-                "Loaded" if not census.empty else "Missing",
-                "Loaded" if not districts.empty else "Missing",
-                "Loaded" if not msme.empty else "Missing",
-            ],
-        }
-    )
+    dataset_info = pd.DataFrame({
+        "Dataset": ["Sales", "SKU Master", "Opening Stock", "Stock Transfer", "Census 2011", "Maharashtra Districts", "Registered MSME"],
+        "Rows": [len(sales), len(sku), len(opening), len(transfer), len(census), len(districts), len(msme)],
+        "Status": ["Loaded" if not x.empty else "Missing" for x in [sales, sku, opening, transfer, census, districts, msme]],
+    })
     st.dataframe(dataset_info, width="stretch")
 
+with st.expander("ℹ️ Project Methodology"):
+    st.markdown(
+        "**Data Preparation:** CSV datasets are cleaned, dates are standardized and numeric fields are converted safely.\n\n"
+        "**Retail Analysis:** Sales are aggregated by date, city, category and SKU. Revenue is calculated using SKU price and units sold.\n\n"
+        "**Geospatial Analysis:** City-level retail metrics are linked with city coordinates to visualize geographic concentration.\n\n"
+        "**Logistics Analysis:** The stock-transfer matrix is reshaped into City–SKU–Date–Quantity records. Because source/destination fields are absent, no artificial route is created.\n\n"
+        "**Inventory Analysis:** The opening-stock matrix is reshaped in the same way and summarized by city and SKU.\n\n"
+        "**Business Context:** MSME and Census datasets provide district-level economic and demographic context for location intelligence."
+    )
+
 # =========================================================
-# FOOTER
+# FILTERED DATA + FOOTER
 # =========================================================
+with st.expander("📋 View Filtered Sales Data"):
+    st.dataframe(filtered, width="stretch", height=450)
+
 st.divider()
-st.caption("Retail & Geospatial Business Intelligence Dashboard | Streamlit | Python | Pandas | Plotly")
+st.caption("Retail & Geospatial Business Intelligence Dashboard | Streamlit • Python • Pandas • Plotly")
